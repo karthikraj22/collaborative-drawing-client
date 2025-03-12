@@ -1,0 +1,74 @@
+.join-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    width: 100vw; 
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    margin: 0;
+    padding: 0;
+}
+
+
+.join-card {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    border-radius: 15px;
+    padding: 30px;
+    width: 400px;
+    box-shadow: 0px 8px 20px rgba(0, 0, 0, 0.3);
+    color: white;
+    text-align: center;
+    transition: transform 0.3s ease-in-out;
+}
+
+.join-card:hover {
+    transform: scale(1.02);
+}
+
+
+
+.input-field {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 16px;
+    transition: all 0.3s ease-in-out;
+    width: 100%;
+}
+
+.input-field::placeholder {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.input-field:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.3);
+    box-shadow: 0px 0px 10px rgba(255, 255, 255, 0.3);
+}
+
+.join-button {
+    background: linear-gradient(135deg, #ff512f, #dd2476);
+    border: none;
+    padding: 12px 20px;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 8px;
+    width: 100%;
+    color: white;
+    transition: all 0.3s ease-in-out;
+}
+
+.join-button:hover {
+    background: linear-gradient(135deg, #e03b2c, #c01f65);
+    transform: scale(1.05);
+}
+
+
+@media (max-width: 480px) {
+    .join-card {
+        width: 90%;
+    }
+}

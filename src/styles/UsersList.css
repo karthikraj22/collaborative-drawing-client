@@ -1,0 +1,96 @@
+.user-list-container {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0px 8px 20px rgba(0, 0, 0, 0.2);
+    color: white;
+    text-align: center;
+    transition: all 0.3s ease-in-out;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.user-list-title {
+    font-weight: bold;
+    font-size: 18px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #fff;
+    background: linear-gradient(135deg, #6a11cb, #2575fc);
+    padding: 12px;
+    border-radius: 10px;
+    box-shadow: 0px 3px 8px rgba(255, 255, 255, 0.2);
+}
+
+.user-highlight-card {
+    background: linear-gradient(135deg, #ffdd57, #ffbb33);
+    border-radius: 12px;
+    padding: 15px;
+    color: black;
+    box-shadow: 0px 3px 8px rgba(255, 165, 0, 0.3);
+    text-align: left;
+    transition: transform 0.3s ease-in-out;
+}
+
+.user-highlight-card:hover {
+    transform: scale(1.02);
+}
+
+.user-card {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    padding: 10px;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.15);
+    transition: transform 0.3s ease-in-out;
+}
+
+.user-card:hover {
+    transform: scale(1.01);
+}
+
+.user-list-item {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 12px;
+    transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+    margin-bottom: 8px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.user-list-item:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+    box-shadow: 0px 4px 12px rgba(255, 255, 255, 0.2);
+}
+
+.join-time {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(0, 0, 0, 0.85); 
+    font-style: italic;
+    margin-top: 4px; 
+}
+
+
+.user-icon {
+    font-size: 24px;
+    margin-right: 10px;
+    color: white;
+}
+
+.user-list-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.user-list-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+}
+
+.user-list-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+}
