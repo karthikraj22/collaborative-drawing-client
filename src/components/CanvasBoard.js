@@ -77,19 +77,22 @@ const CanvasBoard = () => {
     };
 
     return (
-        <div className="canvas-wrapper">
-          
-            <Toolbar setColor={setBrushColor} setBrushSize={setBrushSize} canvasRef={canvasRef} />
+        <div className="drawing-page">
+  <div className="main-container">
+      <Toolbar setColor={setBrushColor} setBrushSize={setBrushSize} canvasRef={canvasRef} />
 
-            <canvas
-                ref={canvasRef}
-                className="canvas-board"
-                onMouseDown={startDrawing}
-                onMouseMove={draw}
-                onMouseUp={stopDrawing}
-                onMouseLeave={stopDrawing}
-            />
-        </div>
+        <canvas
+          ref={canvasRef}
+          className="canvas-board"
+          onMouseDown={startDrawing}
+          onMouseMove={draw}
+          onMouseUp={stopDrawing}
+          onMouseLeave={stopDrawing}
+        />
+    </div>
+</div>
+
+
     );
 };
 

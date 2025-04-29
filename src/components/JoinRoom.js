@@ -14,8 +14,8 @@ const JoinRoom = ({ setUsername, setRoom }) => {
         if (name && room) {
             setUsername(name);
             setRoom(room);
-            localStorage.setItem("username", name);
-            localStorage.setItem("room", room);
+            sessionStorage.setItem("username", name);
+            sessionStorage.setItem("room", room);
             socket.emit("joinRoom", { username: name, room });
             navigate("/draw");
         }

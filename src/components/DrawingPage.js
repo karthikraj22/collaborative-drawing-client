@@ -1,107 +1,267 @@
-// DrawingPage.js
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect,useRef } from "react";
 import { useSocket } from "../context/SocketContext";
 import { useNavigate } from "react-router-dom";
 import CanvasBoard from "./CanvasBoard";
-import UserList from "./UsersList";
+import CombinedPage from "./Combined";
 import NavBar from "./Navbar";
 import { Container, Row, Col } from "react-bootstrap";
 import "../styles/DrawingPage.css";
-import MessageInput from "./MessageInput";
-import ChatBox from "./ChatBox";
 
 const DrawingPage = ({ setUsername, setRoom }) => {
   const navigate = useNavigate();
-  const socket = useSocket(); // Get socket instance
+  const socket = useSocket();
+  const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const [isMaximized, setIsMaximized] = useState(false);
+
   const [users, setUsers] = useState([]);
   const [messages, setMessages] = useState([]);
   const [currentUser, setCurrentUser] = useState("");
-
-  // State for managing audioBlob
-  const [audioBlob, setAudioBlob] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isLiveSpeaking, setIsLiveSpeaking] = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [mediaStream, setMediaStream] = useState(null);
+  const [peerConnection, setPeerConnection] = useState(null);
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [screenShareStream, setScreenShareStream] = useState(null);
+  const [screenSharingUser, setScreenSharingUser] = useState(null);
+  const [videoStreams, setVideoStreams] = useState([]);
+  const [iceCandidatesQueue, setIceCandidatesQueue] = useState([]);
 
-  const startRecording = async () => {
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  // Create PeerConnection with ICE candidates
+  const createPeerConnection = () => {
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }] // STUN server
+    });
 
-        setMediaStream(stream);
-        const mediaRecorder = new MediaRecorder(stream);
-        mediaRecorder.ondataavailable = (event) => {
-          setAudioBlob(event.data);
-        };
-        mediaRecorder.onstop = () => {
-          setIsRecording(false);
-        };
-        mediaRecorder.start();
-        setIsRecording(true);
-      } else {
-        throw new Error('Audio recording is not supported by this browser.');
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit("sendIceCandidate", event.candidate);
       }
+    };
+
+    pc.ontrack = (event) => {
+      const remoteStream = event.streams[0];
+      setVideoStreams((prevStreams) => [...prevStreams, remoteStream]);
+    };
+
+    handlePeerConnectionInitialization(pc);
+    return pc;
+  };
+
+  // Handle peer connection initialization and process buffered ICE candidates
+  const handlePeerConnectionInitialization = (pc) => {
+    setPeerConnection(pc);
+
+    if (iceCandidatesQueue.length > 0) {
+      iceCandidatesQueue.forEach((candidate) => {
+        const iceCandidate = new RTCIceCandidate(candidate);
+        pc.addIceCandidate(iceCandidate).catch((error) => console.error("Failed to add ICE candidate:", error));
+      });
+      setIceCandidatesQueue([]); // Clear ice candidates queue after processing
+    }
+  };
+
+  // Handle receiving ICE candidates
+  const handleReceiveIceCandidate = async (data) => {
+    if (!peerConnection || !peerConnection.remoteDescription) {
+      setIceCandidatesQueue((prevQueue) => [...prevQueue, data.candidate]);
+      return;
+    }
+
+    try {
+      const candidate = new RTCIceCandidate(data);
+      await peerConnection.addIceCandidate(candidate);
+    } catch (err) {
+      console.error("Error adding ICE candidate:", err);
+    }
+  };
+
+  // Handle the offer from the other peer
+  const handleReceiveOffer = async (offer) => {
+    let pc = peerConnection;
+    if (!pc) {
+      pc = createPeerConnection();
+      setPeerConnection(pc);
+    }
+
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit("answer", answer);
+      setIsLiveSpeaking(true);
     } catch (error) {
-      console.error('Error starting audio recording:', error);
-      alert('Error accessing microphone or audio recording is not supported.');
+      console.error("Error handling offer:", error);
+    }
+  };
+
+  // Start live speaking (microphone stream)
+  const startLiveSpeaking = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const pc = createPeerConnection();
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit("offer", offer);
+
+      setPeerConnection(pc);
+      setMediaStream(stream); 
+      setIsLiveSpeaking(true); 
+    } catch (error) {
+      console.error("Error accessing microphone for live speaking:", error);
+    }
+  };
+
+  // Stop live speaking (microphone stream)
+  const stopLiveSpeaking = () => {
+    if (mediaStream && isLiveSpeaking) {
+      mediaStream.getTracks().forEach((track) => track.stop()); // Stop the microphone tracks
+      setIsLiveSpeaking(false);
+      setMediaStream(null);
+      setPeerConnection(null);
+      console.log("Live speaking stopped.");
+    }
+  };
+
+  // Start screen sharing
+  const startScreenSharing = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      console.log("✅ Obtained screen share stream:", stream);
+  
+      const pc = createPeerConnection();
+  
+      stream.getTracks().forEach((track) => {
+        pc.addTrack(track, stream);
+        console.log(`➕ Added track to PeerConnection: ${track.kind}`);
+      });
+  
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      console.log("📤 Created and set local SDP offer:", offer);
+  
+      socket.emit("offer", offer);
+      console.log("🚀 Emitted 'offer' event to signaling server");
+  
+      setPeerConnection(pc);
+      setScreenShareStream(stream);
+      setIsScreenSharing(true);
+      setScreenSharingUser(currentUser);
+    } catch (error) {
+      console.error("❌ Error accessing screen:", error);
+    }
+  };
+  
+
+  // Stop screen sharing
+  const stopScreenSharing = () => {
+    if (screenShareStream) {
+      screenShareStream.getTracks().forEach((track) => track.stop());
+      setIsScreenSharing(false);
+      setScreenShareStream(null);
+      setPeerConnection(null);
+      setScreenSharingUser(null);
+    }
+  };
+
+  // Assume 'socket' is available in your component scope
+
+  const startRecording = () => {
+    if (!isRecording) {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then((stream) => {
+          mediaStreamRef.current = stream;
+          const mediaRecorder = new MediaRecorder(stream);
+          const chunks = [];
+
+          mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              chunks.push(event.data);
+            }
+          };
+
+          mediaRecorder.onstop = () => {
+            const blob = new Blob(chunks, { type: "audio/webm" });
+            setAudioBlob(blob);
+
+            // Emit audio blob to server
+            if (socket) {
+              socket.emit("audioMessage", { audio: blob });
+            }
+
+            setIsRecording(false);
+
+            // Stop all tracks
+            mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+            mediaStreamRef.current = null;
+            mediaRecorderRef.current = null;
+          };
+
+          mediaRecorder.start();
+          mediaRecorderRef.current = mediaRecorder;
+          setIsRecording(true);
+        })
+        .catch((error) => {
+          console.error("Error starting recording:", error);
+        });
+    } else {
+      console.log("Already recording.");
     }
   };
 
   const stopRecording = () => {
-    if (mediaStream) {
-      mediaStream.getTracks().forEach(track => track.stop()); // Stop all tracks (microphone)
-      setMediaStream(null);
-      setIsRecording(false);
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
     }
   };
 
-  const startLiveSpeaking = async () => {
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-        setMediaStream(stream);
-        const mediaRecorder = new MediaRecorder(stream);
-        mediaRecorder.ondataavailable = (event) => {
-          socket.emit("liveAudio", { audio: event.data }); // Emit audio data to server
-        };
-        mediaRecorder.start(1000); // Capture audio every second
-        setIsLiveSpeaking(true);
-      } else {
-        throw new Error('Audio recording is not supported by this browser.');
-      }
-    } catch (error) {
-      console.error('Error accessing microphone for live speaking:', error);
-      alert('Error accessing microphone for live speaking.');
-    }
-  };
 
-  const stopLiveSpeaking = () => {
-    if (mediaStream) {
-      mediaStream.getTracks().forEach(track => track.stop());
-      setIsLiveSpeaking(false);
-    }
-  };
-
+  // Handle sending chat messages
   const handleSendMessage = (message) => {
-    console.log("Sending message:", message);
     if (message.trim()) {
       socket.emit("chatMessage", { message });
     }
   };
 
-  const handleSendAudioMessage = (audioData) => {
-    console.log("Sending audio:", audioData);
-    socket.emit("audioMessage", { audio: audioData });
-    stopRecording(); // Ensure the microphone stops after sending audio
+  // Handle sending audio messages
+  const handleSendAudioMessage = () => {
+    if (audioBlob) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        socket.emit("audioMessage", { audio: reader.result });
+        setAudioBlob(null); // Clear the audioBlob after sending
+      };
+      reader.readAsArrayBuffer(audioBlob);
+    }
   };
 
+  // Listen to socket events for ICE candidates and offers
   useEffect(() => {
-    const storedUsername = localStorage.getItem("username");
-    const storedRoom = localStorage.getItem("room");
+    if (!socket) return;
+
+    socket.on("receiveOffer", handleReceiveOffer);
+    socket.on("receiveIceCandidate", handleReceiveIceCandidate);
+
+    return () => {
+      socket.off("receiveOffer", handleReceiveOffer);
+      socket.off("receiveIceCandidate", handleReceiveIceCandidate);
+    };
+  }, [socket, peerConnection]);
+
+  // Initialize the room and user details
+  useEffect(() => {
+    const storedUsername = sessionStorage.getItem("username");
+    const storedRoom = sessionStorage.getItem("room");
 
     if (!storedUsername || !storedRoom) {
-      navigate("/"); // Redirect if no username or room found
+      navigate("/"); // Redirect to home page
       return;
     }
 
@@ -118,50 +278,6 @@ const DrawingPage = ({ setUsername, setRoom }) => {
     socket.on("message", (message) => {
       setMessages((prevMessages) => [...prevMessages, message]);
     });
-    
-    socket.on("liveAudio", (audioData) => {
-        console.log("Received live audio data:", audioData);
-        
-        // Check if audioData contains valid audio data
-        if (audioData && audioData.audio) {
-          // Convert the audio data into a proper Blob
-          const audioBuffer = new Uint8Array(audioData.audio);  // Assuming the data is in a Uint8Array format
-      
-          // Create a Blob from the audioBuffer (ensure the correct MIME type)
-          const audioBlob = new Blob([audioBuffer], { type: "audio/mpeg" }); // Change this to "audio/wav" if you know it's WAV
-          console.log("Created Blob with type:", audioBlob.type);
-          console.log("Blob size:", audioBlob.size);
-          
-          // Check if the Blob has data and size is not zero
-          if (audioBlob.size > 0) {
-            // Create a URL for the Blob to play
-            const audioURL = URL.createObjectURL(audioBlob);
-            const audio = new Audio(audioURL);
-      
-            // Attempt to play the audio
-            audio.play()
-              .then(() => {
-                console.log("Audio started playing");
-              })
-              .catch((error) => {
-                console.error("Error playing audio:", error);
-              });
-      
-            // Handle audio playback errors
-            audio.onerror = (error) => {
-              console.error("Error loading audio:", error);
-            };
-          } else {
-            console.error("Received audio is empty or corrupted.");
-          }
-        } else {
-          console.error("No valid audio data received.");
-        }
-      });
-      
-      
-      
-      
 
     return () => {
       socket.off("userList");
@@ -169,31 +285,61 @@ const DrawingPage = ({ setUsername, setRoom }) => {
     };
   }, [socket, navigate, setUsername, setRoom]);
 
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    if (videoRef.current && screenShareStream) {
+      videoRef.current.srcObject = screenShareStream;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [screenShareStream]);
+
+
+
   return (
     <div>
       <NavBar />
       <div className="drawing-page">
         <Container fluid>
           <Row className="align-items-start justify-content-between">
-            <Col md={8} className="canvas-container">
+            <Col md={isScreenSharing ? 8 : 6} className="canvas-container">
               <CanvasBoard />
-            </Col>
 
-            <Col md={3} className="user-list-container">
-              <UserList users={users} />
-              <ChatBox messages={messages} currentUser={currentUser} />
-              <MessageInput
+              {isScreenSharing && screenShareStream && (
+                    <div className={`screen-share-popup ${isMaximized ? "maximized" : ""}`}>
+                    <video
+                      ref={videoRef}
+                      className="screen-share-video"
+                      muted
+                      autoPlay
+                      playsInline
+                    />
+                    <button
+                      className="toggle-maximize-btn"
+                      onClick={() => setIsMaximized(!isMaximized)}
+                      aria-label={isMaximized ? "Minimize screen share" : "Maximize screen share"}
+                    >
+                      {isMaximized ? "🗗" : "🗖"}
+                    </button>
+                  </div>
+                            )}
+            </Col>
+            <Col md={3} className="right-side-container">
+              <CombinedPage
+                users={users}
+                messages={messages}
+                currentUser={currentUser}
+                startScreenSharing={startScreenSharing}
+                stopScreenSharing={stopScreenSharing}
+                isScreenSharing={isScreenSharing}
                 onSendMessage={handleSendMessage}
-                onSendAudioMessage={handleSendAudioMessage}
                 startRecording={startRecording}
                 stopRecording={stopRecording}
                 startLiveSpeaking={startLiveSpeaking}
                 stopLiveSpeaking={stopLiveSpeaking}
-                isRecording={isRecording}
-                isLiveSpeaking={isLiveSpeaking}
                 audioBlob={audioBlob}
-                setAudioBlob={setAudioBlob}  // Pass setAudioBlob function to child
-                setIsRecording={setIsRecording}  // Pass setIsRecording function to child
+                setAudioBlob={setAudioBlob}
+                onSendAudioMessage={handleSendAudioMessage}
               />
             </Col>
           </Row>

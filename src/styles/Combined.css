@@ -1,0 +1,128 @@
+/* Scrollbar styling for chat box */
+.chat-box::-webkit-scrollbar {
+  width: 8px;
+}
+.chat-box::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+.chat-box::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+.chat-box::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Hover effect for user list items */
+.hover-shadow {
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+  outline: none;
+}
+
+.hover-shadow:hover,
+.hover-shadow:focus {
+  background-color: rgba(255, 255, 255, 0.25) !important;
+  box-shadow: 0 4px 12px rgba(90, 62, 235, 0.4);
+  outline: none;
+  cursor: default;
+}
+
+/* Avatar styling */
+.avatar {
+  font-weight: 700;
+  user-select: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 50%;
+}
+
+/* Message input styling */
+.message-input {
+  font-size: 1rem;
+  height: 40px;
+  border-radius: 8px;
+  border: 1.5px solid #ced4da;
+  transition: border-color 0.3s ease;
+}
+
+.message-input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 8px rgba(102, 126, 234, 0.5);
+  outline: none;
+}
+
+/* Make InputGroup position relative to position send button absolutely */
+.input-group {
+  position: relative;
+}
+
+/* Remove default button margin */
+.input-group .btn {
+  margin-left: 0;
+}
+
+/* Adjust Form.Control padding to avoid overlap with button */
+.input-group .form-control {
+  padding-right: 2.5rem !important;
+}
+
+/* Chat area background with subtle diagonal stripes pattern */
+.chat-box {
+  background: linear-gradient(135deg, #f0f4ff 25%, transparent 25%),
+              linear-gradient(225deg, #f0f4ff 25%, transparent 25%),
+              linear-gradient(45deg, #f0f4ff 25%, transparent 25%),
+              linear-gradient(315deg, #f0f4ff 25%, #e0e7ff 25%);
+  background-position: 10px 0, 10px 0, 0 0, 0 0;
+  background-size: 20px 20px;
+  background-repeat: repeat;
+  border-radius: 12px;
+  padding: 1.5rem;
+  overflow-y: auto;
+  box-shadow: inset 0 0 10px #d0d9ff;
+}
+
+/* Sent message bubble */
+.message-bubble.sent {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  box-shadow: 0 6px 15px rgba(102, 126, 234, 0.6);
+  border-radius: 20px 20px 4px 20px;
+  padding: 12px 18px;
+  font-weight: 500;
+  max-width: 75%;
+  margin-left: auto;
+  margin-bottom: 12px;
+}
+
+/* Received message bubble */
+.message-bubble.received {
+  background: #f0f4ff;
+  color: #34495e;
+  box-shadow: 0 6px 15px rgba(217, 226, 255, 0.6);
+  border-radius: 20px 20px 20px 4px;
+  padding: 12px 18px;
+  font-weight: 500;
+  max-width: 75%;
+  margin-right: auto;
+  margin-bottom: 12px;
+}
+
+/* Username styling */
+.message-header .username {
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-right: 8px;
+}
+
+/* Timestamp styling */
+.message-header .timestamp {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.7); /* For sent messages */
+}
+
+/* For received message timestamps */
+.message-bubble.received .timestamp {
+  color: rgba(52, 73, 94, 0.6);
+}

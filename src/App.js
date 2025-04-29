@@ -5,8 +5,8 @@ import DrawingPage from "./components/DrawingPage";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 function App() {
-    const [username, setUsername] = useState(localStorage.getItem("username") || "");
-    const [room, setRoom] = useState(localStorage.getItem("room") || "");
+    const [username, setUsername] = useState(sessionStorage.getItem("username") || "");
+    const [room, setRoom] = useState(sessionStorage.getItem("room") || "");
 
     return (
         <Router>
