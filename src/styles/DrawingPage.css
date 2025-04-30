@@ -236,3 +236,37 @@
     height: 400px;
   }
 }
+
+/* .remote-video {
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  background-color: black; 
+} */
+.floating-video {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  width: 300px; 
+  height: 200px; 
+  z-index: 9999;
+  border: 2px solid white;
+  border-radius: 8px;
+  background-color: black;
+  object-fit: cover;  
+}
+
+.maximized {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80%;
+  height: 80%;
+  z-index: 9999;
+  border: 2px solid white;
+  background-color: transparent;
+  object-fit: cover;
+}
+
+

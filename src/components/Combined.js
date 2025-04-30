@@ -251,22 +251,6 @@ const CombinedPage = ({
   </Col>
 </Row>
 
-
-        {audioBlob && (
-          <Row className="mt-3">
-            <Col>
-              <Button
-                variant="success"
-                onClick={handleSendAudioMessageLocal}
-                aria-label="Send recorded audio message"
-                className="w-100"
-              >
-                <FaVolumeUp className="me-2" />
-                Send Audio
-              </Button>
-            </Col>
-          </Row>
-        )}
       </div>
 
       {/* ===========================

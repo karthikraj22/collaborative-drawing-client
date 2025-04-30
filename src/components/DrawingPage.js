@@ -1,4 +1,4 @@
-import React, { useState, useEffect,useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useSocket } from "../context/SocketContext";
 import { useNavigate } from "react-router-dom";
 import CanvasBoard from "./CanvasBoard";
@@ -12,6 +12,8 @@ const DrawingPage = ({ setUsername, setRoom }) => {
   const socket = useSocket();
   const mediaRecorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
+  const videoRefs = useRef([]); // Create a ref to store video elements
+
   const [isMaximized, setIsMaximized] = useState(false);
 
   const [users, setUsers] = useState([]);
@@ -28,10 +30,17 @@ const DrawingPage = ({ setUsername, setRoom }) => {
   const [videoStreams, setVideoStreams] = useState([]);
   const [iceCandidatesQueue, setIceCandidatesQueue] = useState([]);
 
-  // Create PeerConnection with ICE candidates
+
+  const [isVideoMaximized, setIsVideoMaximized] = useState(false);
+
+const toggleVideoSize = () => {
+  setIsVideoMaximized(!isVideoMaximized);
+};
+
+
   const createPeerConnection = () => {
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }] // STUN server
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
     });
 
     pc.onicecandidate = (event) => {
@@ -42,14 +51,27 @@ const DrawingPage = ({ setUsername, setRoom }) => {
 
     pc.ontrack = (event) => {
       const remoteStream = event.streams[0];
-      setVideoStreams((prevStreams) => [...prevStreams, remoteStream]);
-    };
+      console.log("✅ Received remote stream:", remoteStream);
 
+      if (!remoteStream.getVideoTracks().length) {
+        console.error("❌ No video tracks found in the remote stream.");
+      } else {
+        console.log("🎥 Video tracks in remote stream:", remoteStream.getVideoTracks());
+      }
+
+      setVideoStreams((prevStreams) => {
+        if (!prevStreams.some((stream) => stream.id === remoteStream.id)) {
+          console.log("➕ Adding new remote stream to videoStreams");
+          return [...prevStreams, remoteStream];
+        }
+        return prevStreams;
+      });
+    };
+    
     handlePeerConnectionInitialization(pc);
     return pc;
   };
 
-  // Handle peer connection initialization and process buffered ICE candidates
   const handlePeerConnectionInitialization = (pc) => {
     setPeerConnection(pc);
 
@@ -58,11 +80,10 @@ const DrawingPage = ({ setUsername, setRoom }) => {
         const iceCandidate = new RTCIceCandidate(candidate);
         pc.addIceCandidate(iceCandidate).catch((error) => console.error("Failed to add ICE candidate:", error));
       });
-      setIceCandidatesQueue([]); // Clear ice candidates queue after processing
+      setIceCandidatesQueue([]); 
     }
   };
 
-  // Handle receiving ICE candidates
   const handleReceiveIceCandidate = async (data) => {
     if (!peerConnection || !peerConnection.remoteDescription) {
       setIceCandidatesQueue((prevQueue) => [...prevQueue, data.candidate]);
@@ -77,7 +98,6 @@ const DrawingPage = ({ setUsername, setRoom }) => {
     }
   };
 
-  // Handle the offer from the other peer
   const handleReceiveOffer = async (offer) => {
     let pc = peerConnection;
     if (!pc) {
@@ -87,19 +107,17 @@ const DrawingPage = ({ setUsername, setRoom }) => {
 
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit("answer", answer);
-      setIsLiveSpeaking(true);
+      console.log("📥 Received offer, created and sent answer");
+
     } catch (error) {
-      console.error("Error handling offer:", error);
+      console.error("❌ Error handling received offer:", error);
     }
   };
 
-  // Start live speaking (microphone stream)
   const startLiveSpeaking = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -111,17 +129,16 @@ const DrawingPage = ({ setUsername, setRoom }) => {
       socket.emit("offer", offer);
 
       setPeerConnection(pc);
-      setMediaStream(stream); 
-      setIsLiveSpeaking(true); 
+      setMediaStream(stream);
+      setIsLiveSpeaking(true); // Only update live speaking state
     } catch (error) {
       console.error("Error accessing microphone for live speaking:", error);
     }
   };
 
-  // Stop live speaking (microphone stream)
   const stopLiveSpeaking = () => {
     if (mediaStream && isLiveSpeaking) {
-      mediaStream.getTracks().forEach((track) => track.stop()); // Stop the microphone tracks
+      mediaStream.getTracks().forEach((track) => track.stop());
       setIsLiveSpeaking(false);
       setMediaStream(null);
       setPeerConnection(null);
@@ -129,37 +146,30 @@ const DrawingPage = ({ setUsername, setRoom }) => {
     }
   };
 
-  // Start screen sharing
   const startScreenSharing = async () => {
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       console.log("✅ Obtained screen share stream:", stream);
-  
+
       const pc = createPeerConnection();
-  
       stream.getTracks().forEach((track) => {
         pc.addTrack(track, stream);
         console.log(`➕ Added track to PeerConnection: ${track.kind}`);
       });
-  
+
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      console.log("📤 Created and set local SDP offer:", offer);
-  
-      socket.emit("offer", offer);
-      console.log("🚀 Emitted 'offer' event to signaling server");
-  
+      socket.emit("sendOffer", offer);
+
       setPeerConnection(pc);
       setScreenShareStream(stream);
-      setIsScreenSharing(true);
+      setIsScreenSharing(true); // Only update screen sharing state
       setScreenSharingUser(currentUser);
     } catch (error) {
       console.error("❌ Error accessing screen:", error);
     }
   };
-  
 
-  // Stop screen sharing
   const stopScreenSharing = () => {
     if (screenShareStream) {
       screenShareStream.getTracks().forEach((track) => track.stop());
@@ -169,8 +179,6 @@ const DrawingPage = ({ setUsername, setRoom }) => {
       setScreenSharingUser(null);
     }
   };
-
-  // Assume 'socket' is available in your component scope
 
   const startRecording = () => {
     if (!isRecording) {
@@ -221,47 +229,53 @@ const DrawingPage = ({ setUsername, setRoom }) => {
     }
   };
 
-
-
-  // Handle sending chat messages
   const handleSendMessage = (message) => {
     if (message.trim()) {
       socket.emit("chatMessage", { message });
     }
   };
 
-  // Handle sending audio messages
   const handleSendAudioMessage = () => {
     if (audioBlob) {
       const reader = new FileReader();
       reader.onloadend = () => {
         socket.emit("audioMessage", { audio: reader.result });
-        setAudioBlob(null); // Clear the audioBlob after sending
+        setAudioBlob(null); 
       };
       reader.readAsArrayBuffer(audioBlob);
     }
   };
 
-  // Listen to socket events for ICE candidates and offers
+  const handleAnswer = async (answer) => {
+    if (!peerConnection) return;
+    try {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      console.log("✅ Received and set remote answer");
+    } catch (err) {
+      console.error("❌ Error setting remote answer:", err);
+    }
+  };
+
   useEffect(() => {
     if (!socket) return;
 
     socket.on("receiveOffer", handleReceiveOffer);
     socket.on("receiveIceCandidate", handleReceiveIceCandidate);
+    socket.on("answer", handleAnswer);
 
     return () => {
       socket.off("receiveOffer", handleReceiveOffer);
       socket.off("receiveIceCandidate", handleReceiveIceCandidate);
+      socket.off("answer");
     };
   }, [socket, peerConnection]);
 
-  // Initialize the room and user details
   useEffect(() => {
     const storedUsername = sessionStorage.getItem("username");
     const storedRoom = sessionStorage.getItem("room");
 
     if (!storedUsername || !storedRoom) {
-      navigate("/"); // Redirect to home page
+      navigate("/"); 
       return;
     }
 
@@ -294,6 +308,41 @@ const DrawingPage = ({ setUsername, setRoom }) => {
     }
   }, [screenShareStream]);
 
+  useEffect(() => {
+    console.log("Current videoStreams:", videoStreams);
+
+    videoStreams.forEach((stream, index) => {
+      const videoElement = document.getElementById(`remote-video-${index}`);
+      if (videoElement) {
+        if (videoElement.srcObject !== stream) {
+          console.log(`Setting stream for video ${index}`);
+          videoElement.srcObject = stream;
+
+          const playPromise = videoElement.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((err) => {
+              console.error("Autoplay blocked. Attempting to play manually:", err);
+              videoElement.muted = true; // Ensure it's muted for autoplay
+              videoElement.play();
+            });
+          }
+        }
+      } else {
+        console.error(`Video element with id remote-video-${index} not found`);
+      }
+    });
+  }, [videoStreams]);
+
+  useEffect(() => {
+    videoStreams.forEach((stream, index) => {
+      const videoElement = document.getElementById(`remote-video-${index}`);
+      if (!videoElement) {
+        console.error(`Video element with id remote-video-${index} not found.`);
+      }
+    });
+  }, [videoStreams]);
+    
+  console.log("PeerConnection state:", peerConnection?.connectionState);
 
 
   return (
@@ -306,23 +355,61 @@ const DrawingPage = ({ setUsername, setRoom }) => {
               <CanvasBoard />
 
               {isScreenSharing && screenShareStream && (
-                    <div className={`screen-share-popup ${isMaximized ? "maximized" : ""}`}>
-                    <video
-                      ref={videoRef}
-                      className="screen-share-video"
-                      muted
-                      autoPlay
-                      playsInline
-                    />
-                    <button
-                      className="toggle-maximize-btn"
-                      onClick={() => setIsMaximized(!isMaximized)}
-                      aria-label={isMaximized ? "Minimize screen share" : "Maximize screen share"}
-                    >
-                      {isMaximized ? "🗗" : "🗖"}
-                    </button>
-                  </div>
-                            )}
+                <div className={`screen-share-popup ${isMaximized ? "maximized" : ""}`}>
+                  <video
+                    ref={videoRef}
+                    className="screen-share-video"
+                    muted
+                    autoPlay
+                    playsInline
+                  />
+                  <button
+                    className="toggle-maximize-btn"
+                    onClick={() => setIsMaximized(!isMaximized)}
+                    aria-label={isMaximized ? "Minimize screen share" : "Maximize screen share"}
+                  >
+                    {isMaximized ? "🗗" : "🗖"}
+                  </button>
+                </div>
+              )}
+
+{!isScreenSharing && videoStreams.length > 0 && (
+  <div className="remote-videos">
+    {videoStreams.map((stream, index) => (
+      <video
+        key={index}
+        id={`remote-video-${index}`}
+        className={`remote-video ${isVideoMaximized ? 'maximized' : 'floating-video'}`}
+        autoPlay
+        playsInline
+        muted
+        ref={(video) => {
+          if (video && stream) {
+            console.log("stream", stream);
+
+            // Only set srcObject if it's not already set
+            if (video.srcObject !== stream) {
+              video.srcObject = stream;
+              video.play().catch((err) => {
+                console.error("Error playing video:", err);
+              });
+            }
+          }
+        }}
+        onClick={toggleVideoSize}
+        style={{
+          width: isVideoMaximized ? "80vw" : "300px", // Dynamically resize
+          height: isVideoMaximized ? "80vh" : "200px", // Dynamically resize
+          position: "fixed",
+          bottom: 10,
+          left: 10 + index * 310,
+        }}
+      />
+    ))}
+  </div>
+)}
+
+
             </Col>
             <Col md={3} className="right-side-container">
               <CombinedPage
@@ -337,6 +424,8 @@ const DrawingPage = ({ setUsername, setRoom }) => {
                 stopRecording={stopRecording}
                 startLiveSpeaking={startLiveSpeaking}
                 stopLiveSpeaking={stopLiveSpeaking}
+                isRecording={isRecording}
+                isLiveSpeaking={isLiveSpeaking}
                 audioBlob={audioBlob}
                 setAudioBlob={setAudioBlob}
                 onSendAudioMessage={handleSendAudioMessage}
