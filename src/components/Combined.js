@@ -67,6 +67,13 @@ const CombinedPage = ({
       setTextMessage("");
     }
   };
+  
+  useEffect(() => {
+    if (audioBlob) {
+      handleSendAudioMessageLocal();
+    }
+  }, [audioBlob]);
+  
 
   const handleSendAudioMessageLocal = () => {
     if (audioBlob) {

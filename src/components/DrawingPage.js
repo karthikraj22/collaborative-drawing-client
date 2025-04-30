@@ -6,228 +6,176 @@ import CombinedPage from "./Combined";
 import NavBar from "./Navbar";
 import { Container, Row, Col } from "react-bootstrap";
 import "../styles/DrawingPage.css";
+import { MdFullscreen, MdFullscreenExit } from "react-icons/md";
 
 const DrawingPage = ({ setUsername, setRoom }) => {
   const navigate = useNavigate();
   const socket = useSocket();
-  const mediaRecorderRef = useRef(null);
-  const mediaStreamRef = useRef(null);
-  const videoRefs = useRef([]); // Create a ref to store video elements
 
-  const [isMaximized, setIsMaximized] = useState(false);
-
+  const videoRef = useRef(null);
   const [users, setUsers] = useState([]);
   const [messages, setMessages] = useState([]);
   const [currentUser, setCurrentUser] = useState("");
-  const [isRecording, setIsRecording] = useState(false);
+
+  // Audio
   const [isLiveSpeaking, setIsLiveSpeaking] = useState(false);
+  const [audioPeer, setAudioPeer] = useState(null);
+  const [audioStream, setAudioStream] = useState(null);
+  const [audioIceQueue, setAudioIceQueue] = useState([]);
+
+  // Screen sharing
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [mediaStream, setMediaStream] = useState(null);
-  const [peerConnection, setPeerConnection] = useState(null);
-  const [audioBlob, setAudioBlob] = useState(null);
-  const [screenShareStream, setScreenShareStream] = useState(null);
-  const [screenSharingUser, setScreenSharingUser] = useState(null);
+  const [screenStream, setScreenStream] = useState(null);
+  const [screenPeer, setScreenPeer] = useState(null);
+  const [screenIceQueue, setScreenIceQueue] = useState([]);
+  const [isMaximized, setIsMaximized] = useState(false);
   const [videoStreams, setVideoStreams] = useState([]);
-  const [iceCandidatesQueue, setIceCandidatesQueue] = useState([]);
+const [isVideoMaximized, setIsVideoMaximized] = useState(false);
 
+  const [dragPosition, setDragPosition] = useState({ x: 20, y: 20 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
 
-  const [isVideoMaximized, setIsVideoMaximized] = useState(false);
+  // Recording
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState(null);
+  const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
 
-const toggleVideoSize = () => {
-  setIsVideoMaximized(!isVideoMaximized);
-};
-
-
-  const createPeerConnection = () => {
+  const createPeerConnection = (type) => {
     const pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
     });
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        socket.emit("sendIceCandidate", event.candidate);
+        socket.emit(`${type}IceCandidate`, event.candidate);
       }
     };
 
-    pc.ontrack = (event) => {
-      const remoteStream = event.streams[0];
-      console.log("✅ Received remote stream:", remoteStream);
-
-      if (!remoteStream.getVideoTracks().length) {
-        console.error("❌ No video tracks found in the remote stream.");
-      } else {
-        console.log("🎥 Video tracks in remote stream:", remoteStream.getVideoTracks());
-      }
-
-      setVideoStreams((prevStreams) => {
-        if (!prevStreams.some((stream) => stream.id === remoteStream.id)) {
-          console.log("➕ Adding new remote stream to videoStreams");
-          return [...prevStreams, remoteStream];
-        }
-        return prevStreams;
-      });
-    };
-    
-    handlePeerConnectionInitialization(pc);
     return pc;
   };
 
-  const handlePeerConnectionInitialization = (pc) => {
-    setPeerConnection(pc);
-
-    if (iceCandidatesQueue.length > 0) {
-      iceCandidatesQueue.forEach((candidate) => {
-        const iceCandidate = new RTCIceCandidate(candidate);
-        pc.addIceCandidate(iceCandidate).catch((error) => console.error("Failed to add ICE candidate:", error));
-      });
-      setIceCandidatesQueue([]); 
-    }
-  };
-
-  const handleReceiveIceCandidate = async (data) => {
-    if (!peerConnection || !peerConnection.remoteDescription) {
-      setIceCandidatesQueue((prevQueue) => [...prevQueue, data.candidate]);
-      return;
-    }
-
-    try {
-      const candidate = new RTCIceCandidate(data);
-      await peerConnection.addIceCandidate(candidate);
-    } catch (err) {
-      console.error("Error adding ICE candidate:", err);
-    }
-  };
-
-  const handleReceiveOffer = async (offer) => {
-    let pc = peerConnection;
-    if (!pc) {
-      pc = createPeerConnection();
-      setPeerConnection(pc);
-    }
-
-    try {
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit("answer", answer);
-      console.log("📥 Received offer, created and sent answer");
-
-    } catch (error) {
-      console.error("❌ Error handling received offer:", error);
-    }
-  };
-
+  // Audio functions
   const startLiveSpeaking = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const pc = createPeerConnection();
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const pc = createPeerConnection("audio");
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit("offer", offer);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit("audioOffer", offer);
 
-      setPeerConnection(pc);
-      setMediaStream(stream);
-      setIsLiveSpeaking(true); // Only update live speaking state
-    } catch (error) {
-      console.error("Error accessing microphone for live speaking:", error);
-    }
+    setAudioPeer(pc);
+    setAudioStream(stream);
+    setIsLiveSpeaking(true);
   };
 
   const stopLiveSpeaking = () => {
-    if (mediaStream && isLiveSpeaking) {
-      mediaStream.getTracks().forEach((track) => track.stop());
-      setIsLiveSpeaking(false);
-      setMediaStream(null);
-      setPeerConnection(null);
-      console.log("Live speaking stopped.");
+    audioStream?.getTracks().forEach((t) => t.stop());
+    setAudioStream(null);
+    setAudioPeer(null);
+    setIsLiveSpeaking(false);
+  };
+
+  const handleAudioAnswer = async (answer) => {
+    if (audioPeer) {
+      await audioPeer.setRemoteDescription(new RTCSessionDescription(answer));
     }
   };
 
-  const startScreenSharing = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      console.log("✅ Obtained screen share stream:", stream);
-
-      const pc = createPeerConnection();
-      stream.getTracks().forEach((track) => {
-        pc.addTrack(track, stream);
-        console.log(`➕ Added track to PeerConnection: ${track.kind}`);
-      });
-
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit("sendOffer", offer);
-
-      setPeerConnection(pc);
-      setScreenShareStream(stream);
-      setIsScreenSharing(true); // Only update screen sharing state
-      setScreenSharingUser(currentUser);
-    } catch (error) {
-      console.error("❌ Error accessing screen:", error);
+  const handleAudioIce = async (candidate) => {
+    if (!audioPeer || !audioPeer.remoteDescription) {
+      setAudioIceQueue((q) => [...q, candidate]);
+    } else {
+      await audioPeer.addIceCandidate(new RTCIceCandidate(candidate));
     }
+  };
+
+  // Screen sharing functions
+  const startScreenSharing = async () => {
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    const pc = createPeerConnection("screen");
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit("screenOffer", offer);
+
+    setScreenPeer(pc);
+    setScreenStream(stream);
+    setIsScreenSharing(true);
   };
 
   const stopScreenSharing = () => {
-    if (screenShareStream) {
-      screenShareStream.getTracks().forEach((track) => track.stop());
-      setIsScreenSharing(false);
-      setScreenShareStream(null);
-      setPeerConnection(null);
-      setScreenSharingUser(null);
+    screenStream?.getTracks().forEach((t) => t.stop());
+    setScreenStream(null);
+    setScreenPeer(null);
+    setIsScreenSharing(false);
+    socket.emit("screenShareStopped");
+  };
+
+  const handleScreenAnswer = async (answer) => {
+    if (screenPeer) {
+      await screenPeer.setRemoteDescription(new RTCSessionDescription(answer));
     }
   };
 
-  const startRecording = () => {
-    if (!isRecording) {
-      navigator.mediaDevices.getUserMedia({ audio: true })
-        .then((stream) => {
-          mediaStreamRef.current = stream;
-          const mediaRecorder = new MediaRecorder(stream);
-          const chunks = [];
-
-          mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > 0) {
-              chunks.push(event.data);
-            }
-          };
-
-          mediaRecorder.onstop = () => {
-            const blob = new Blob(chunks, { type: "audio/webm" });
-            setAudioBlob(blob);
-
-            // Emit audio blob to server
-            if (socket) {
-              socket.emit("audioMessage", { audio: blob });
-            }
-
-            setIsRecording(false);
-
-            // Stop all tracks
-            mediaStreamRef.current.getTracks().forEach((track) => track.stop());
-            mediaStreamRef.current = null;
-            mediaRecorderRef.current = null;
-          };
-
-          mediaRecorder.start();
-          mediaRecorderRef.current = mediaRecorder;
-          setIsRecording(true);
-        })
-        .catch((error) => {
-          console.error("Error starting recording:", error);
-        });
+  const handleScreenIce = async (candidate) => {
+    if (!screenPeer || !screenPeer.remoteDescription) {
+      setScreenIceQueue((q) => [...q, candidate]);
     } else {
-      console.log("Already recording.");
+      await screenPeer.addIceCandidate(new RTCIceCandidate(candidate));
     }
   };
 
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  
+      if (!MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+        console.warn("audio/webm;codecs=opus not supported, using default type.");
+      }
+  
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: "audio/webm;codecs=opus",
+      });
+  
+      const chunks = [];
+  
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunks.push(e.data);
+        }
+      };
+  
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: "audio/webm;codecs=opus" });
+        console.log("Recording stopped. Blob size:", blob.size);
+        setAudioBlob(blob);
+        stream.getTracks().forEach((t) => t.stop());
+      };
+  
+      mediaRecorderRef.current = mediaRecorder;
+      mediaStreamRef.current = stream;
+  
+      mediaRecorder.start();
+      setIsRecording(true);
+      console.log("Recording started");
+    } catch (err) {
+      console.error("Failed to start recording:", err);
+      alert("Microphone access denied or unsupported browser.");
+    }
+  };
+  
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      console.log("Recording stopped");
     }
   };
+  
 
   const handleSendMessage = (message) => {
     if (message.trim()) {
@@ -239,43 +187,49 @@ const toggleVideoSize = () => {
     if (audioBlob) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        socket.emit("audioMessage", { audio: reader.result });
-        setAudioBlob(null); 
+        if (reader.result) {
+          console.log("Sending audio message, size:", reader.result.byteLength);
+          socket.emit("audioMessage", { audio: reader.result });
+          setAudioBlob(null); // Clear after sending
+        } else {
+          console.warn("Empty audio data");
+        }
       };
       reader.readAsArrayBuffer(audioBlob);
+    } else {
+      console.warn("No audioBlob to send");
     }
   };
+  
 
-  const handleAnswer = async (answer) => {
-    if (!peerConnection) return;
-    try {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-      console.log("✅ Received and set remote answer");
-    } catch (err) {
-      console.error("❌ Error setting remote answer:", err);
-    }
-  };
-
-  useEffect(() => {
-    if (!socket) return;
-
-    socket.on("receiveOffer", handleReceiveOffer);
-    socket.on("receiveIceCandidate", handleReceiveIceCandidate);
-    socket.on("answer", handleAnswer);
-
-    return () => {
-      socket.off("receiveOffer", handleReceiveOffer);
-      socket.off("receiveIceCandidate", handleReceiveIceCandidate);
-      socket.off("answer");
+  // UI drag
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    dragOffset.current = {
+      x: e.clientX - dragPosition.x,
+      y: e.clientY - dragPosition.y,
     };
-  }, [socket, peerConnection]);
+    e.stopPropagation();
+  };
 
+  const handleMouseMove = (e) => {
+    if (isDragging && !isMaximized) {
+      setDragPosition({
+        x: e.clientX - dragOffset.current.x,
+        y: e.clientY - dragOffset.current.y,
+      });
+    }
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
+  // Init
   useEffect(() => {
     const storedUsername = sessionStorage.getItem("username");
     const storedRoom = sessionStorage.getItem("room");
 
     if (!storedUsername || !storedRoom) {
-      navigate("/"); 
+      navigate("/");
       return;
     }
 
@@ -285,65 +239,77 @@ const toggleVideoSize = () => {
 
     socket.emit("joinRoom", { username: storedUsername, room: storedRoom });
 
-    socket.on("userList", (userList) => {
-      setUsers(userList);
-    });
+    socket.on("userList", setUsers);
+    socket.on("message", (m) => setMessages((prev) => [...prev, m]));
 
-    socket.on("message", (message) => {
-      setMessages((prevMessages) => [...prevMessages, message]);
+    socket.on("audioAnswer", handleAudioAnswer);
+    socket.on("audioIceCandidate", handleAudioIce);
+    socket.on("screenAnswer", handleScreenAnswer);
+    socket.on("screenIceCandidate", handleScreenIce);
+    socket.on("screenOffer", async (offer) => {
+      const pc = createPeerConnection("screen");
+    
+      pc.ontrack = (event) => {
+        const remoteStream = event.streams[0];
+        if (remoteStream) {
+          setVideoStreams((prev) => [...prev, remoteStream]);
+        }
+      };
+    
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit("screenAnswer", answer);
+      setScreenPeer(pc); // Optional if you want to track per-peer
     });
+    
+    socket.on("screenShareStopped", () => {
+      setVideoStreams([]);
+    });
+    
 
     return () => {
       socket.off("userList");
       socket.off("message");
+      socket.off("audioAnswer");
+      socket.off("audioIceCandidate");
+      socket.off("screenAnswer");
+      socket.off("screenIceCandidate");
+      socket.off("screenOffer");
+      socket.off("screenShareStopped"); 
     };
-  }, [socket, navigate, setUsername, setRoom]);
-
-  const videoRef = useRef(null);
-
-  useEffect(() => {
-    if (videoRef.current && screenShareStream) {
-      videoRef.current.srcObject = screenShareStream;
-      videoRef.current.play().catch(() => {});
-    }
-  }, [screenShareStream]);
-
-  useEffect(() => {
-    console.log("Current videoStreams:", videoStreams);
-
-    videoStreams.forEach((stream, index) => {
-      const videoElement = document.getElementById(`remote-video-${index}`);
-      if (videoElement) {
-        if (videoElement.srcObject !== stream) {
-          console.log(`Setting stream for video ${index}`);
-          videoElement.srcObject = stream;
-
-          const playPromise = videoElement.play();
-          if (playPromise !== undefined) {
-            playPromise.catch((err) => {
-              console.error("Autoplay blocked. Attempting to play manually:", err);
-              videoElement.muted = true; // Ensure it's muted for autoplay
-              videoElement.play();
-            });
-          }
-        }
-      } else {
-        console.error(`Video element with id remote-video-${index} not found`);
-      }
-    });
-  }, [videoStreams]);
-
-  useEffect(() => {
-    videoStreams.forEach((stream, index) => {
-      const videoElement = document.getElementById(`remote-video-${index}`);
-      if (!videoElement) {
-        console.error(`Video element with id remote-video-${index} not found.`);
-      }
-    });
-  }, [videoStreams]);
     
-  console.log("PeerConnection state:", peerConnection?.connectionState);
+  }, [socket]);
 
+  // Apply queued ICE candidates
+  useEffect(() => {
+    audioIceQueue.forEach(async (candidate) => {
+      if (audioPeer) await audioPeer.addIceCandidate(new RTCIceCandidate(candidate));
+    });
+    setAudioIceQueue([]);
+  }, [audioPeer]);
+
+  useEffect(() => {
+    screenIceQueue.forEach(async (candidate) => {
+      if (screenPeer) await screenPeer.addIceCandidate(new RTCIceCandidate(candidate));
+    });
+    setScreenIceQueue([]);
+  }, [screenPeer]);
+
+  useEffect(() => {
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDragging]);
+
+  useEffect(() => {
+    if (videoRef.current && screenStream) {
+      videoRef.current.srcObject = screenStream;
+    }
+  }, [screenStream]);
 
   return (
     <div>
@@ -353,66 +319,44 @@ const toggleVideoSize = () => {
           <Row className="align-items-start justify-content-between">
             <Col md={isScreenSharing ? 8 : 6} className="canvas-container">
               <CanvasBoard />
-
-              {isScreenSharing && screenShareStream && (
-                <div className={`screen-share-popup ${isMaximized ? "maximized" : ""}`}>
+              {isScreenSharing && screenStream && (
+                <div
+                  className={`screen-share-popup ${isMaximized ? "maximized" : ""}`}
+                  style={
+                    isMaximized
+                      ? {}
+                      : {
+                          position: "fixed",
+                          left: `${dragPosition.x}px`,
+                          top: `${dragPosition.y}px`,
+                          zIndex: 1000,
+                        }
+                  }
+                  onMouseDown={handleMouseDown}
+                >
                   <video
                     ref={videoRef}
                     className="screen-share-video"
-                    muted
                     autoPlay
+                    muted
                     playsInline
                   />
                   <button
                     className="toggle-maximize-btn"
-                    onClick={() => setIsMaximized(!isMaximized)}
-                    aria-label={isMaximized ? "Minimize screen share" : "Maximize screen share"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsMaximized(!isMaximized);
+                    }}
                   >
-                    {isMaximized ? "🗗" : "🗖"}
+                    {isMaximized ? <MdFullscreenExit /> : <MdFullscreen />}
                   </button>
                 </div>
               )}
-
-{!isScreenSharing && videoStreams.length > 0 && (
-  <div className="remote-videos">
-    {videoStreams.map((stream, index) => (
-      <video
-        key={index}
-        id={`remote-video-${index}`}
-        className={`remote-video ${isVideoMaximized ? 'maximized' : 'floating-video'}`}
-        autoPlay
-        playsInline
-        muted
-        ref={(video) => {
-          if (video && stream) {
-            console.log("stream", stream);
-
-            // Only set srcObject if it's not already set
-            if (video.srcObject !== stream) {
-              video.srcObject = stream;
-              video.play().catch((err) => {
-                console.error("Error playing video:", err);
-              });
-            }
-          }
-        }}
-        onClick={toggleVideoSize}
-        style={{
-          width: isVideoMaximized ? "80vw" : "300px", // Dynamically resize
-          height: isVideoMaximized ? "80vh" : "200px", // Dynamically resize
-          position: "fixed",
-          bottom: 10,
-          left: 10 + index * 310,
-        }}
-      />
-    ))}
-  </div>
-)}
-
-
+              {!isScreenSharing && videoStreams.length > 0 && (   <div className="remote-videos">     {videoStreams.map((stream, index) => (       <div         key={index}         className={`remote-video-popup ${isVideoMaximized ? "maximized" : ""}`}         style={           isVideoMaximized             ? {}             : {                 left: `${dragPosition.x + index * 330}px`,                 top: `${dragPosition.y}px`,               }         }         onMouseDown={handleMouseDown}       >         <video           id={`remote-video-${index}`}           className="remote-video-element"           autoPlay           playsInline           muted           ref={(video) => {             if (video && stream && video.srcObject !== stream) {               video.srcObject = stream;               video.play().catch((err) => {                 console.error("Error playing remote video:", err);               });             }           }}         />         <button           className="toggle-maximize-btn"           onClick={(e) => {             e.stopPropagation();             setIsVideoMaximized(!isVideoMaximized);           }}           aria-label={isVideoMaximized ? "Minimize remote video" : "Maximize remote video"}         >           {isVideoMaximized ? <MdFullscreenExit /> : <MdFullscreen />}         </button>       </div>     ))}   </div> )}
             </Col>
+
             <Col md={3} className="right-side-container">
-              <CombinedPage
+                          <CombinedPage
                 users={users}
                 messages={messages}
                 currentUser={currentUser}
@@ -426,10 +370,11 @@ const toggleVideoSize = () => {
                 stopLiveSpeaking={stopLiveSpeaking}
                 isRecording={isRecording}
                 isLiveSpeaking={isLiveSpeaking}
-                audioBlob={audioBlob}
-                setAudioBlob={setAudioBlob}
+                audioBlob={audioBlob}     
+                setAudioBlob={setAudioBlob} 
                 onSendAudioMessage={handleSendAudioMessage}
               />
+
             </Col>
           </Row>
         </Container>
