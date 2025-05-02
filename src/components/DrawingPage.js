@@ -30,7 +30,7 @@ const DrawingPage = ({ setUsername, setRoom }) => {
   const [screenIceQueue, setScreenIceQueue] = useState([]);
   const [isMaximized, setIsMaximized] = useState(false);
   const [videoStreams, setVideoStreams] = useState([]);
-const [isVideoMaximized, setIsVideoMaximized] = useState(false);
+  const [isVideoMaximized, setIsVideoMaximized] = useState(false);
 
   const [dragPosition, setDragPosition] = useState({ x: 20, y: 20 });
   const [isDragging, setIsDragging] = useState(false);
@@ -43,14 +43,32 @@ const [isVideoMaximized, setIsVideoMaximized] = useState(false);
   const mediaStreamRef = useRef(null);
 
   const createPeerConnection = (type) => {
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-    });
+    console.log(`[${type.toUpperCase()}] Creating peer connection`);
+    const configuration = {
+      iceServers: [
+        {
+          urls: process.env.REACT_APP_TURN_URL,
+          username: process.env.REACT_APP_TURN_USERNAME,
+          credential: process.env.REACT_APP_TURN_CREDENTIAL,
+        },
+      ],
+    };
+
+    const pc = new RTCPeerConnection(configuration);
+    console.log("",pc);
+    
+    const connectionState = pc.connectionState;
+    console.log("Connection State:", connectionState);
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log(`[${type.toUpperCase()}] Local ICE candidate:`, event.candidate);
         socket.emit(`${type}IceCandidate`, event.candidate);
       }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log(`[${type.toUpperCase()}] ICE connection state:`, pc.iceConnectionState);
     };
 
     return pc;
@@ -58,12 +76,18 @@ const [isVideoMaximized, setIsVideoMaximized] = useState(false);
 
   // Audio functions
   const startLiveSpeaking = async () => {
+    console.log("[AUDIO] Starting live speaking...");
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const pc = createPeerConnection("audio");
-    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+    stream.getTracks().forEach((track) => {
+      pc.addTrack(track, stream);
+      console.log("[AUDIO] Added audio track:", track);
+    });
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
+    console.log("[AUDIO] Sent audio offer:", offer);
     socket.emit("audioOffer", offer);
 
     setAudioPeer(pc);
@@ -72,6 +96,7 @@ const [isVideoMaximized, setIsVideoMaximized] = useState(false);
   };
 
   const stopLiveSpeaking = () => {
+    console.log("[AUDIO] Stopping live speaking...");
     audioStream?.getTracks().forEach((t) => t.stop());
     setAudioStream(null);
     setAudioPeer(null);
@@ -79,12 +104,14 @@ const [isVideoMaximized, setIsVideoMaximized] = useState(false);
   };
 
   const handleAudioAnswer = async (answer) => {
+    console.log("[AUDIO] Received answer:", answer);
     if (audioPeer) {
       await audioPeer.setRemoteDescription(new RTCSessionDescription(answer));
     }
   };
 
   const handleAudioIce = async (candidate) => {
+    console.log("[AUDIO] Received remote ICE candidate:", candidate);
     if (!audioPeer || !audioPeer.remoteDescription) {
       setAudioIceQueue((q) => [...q, candidate]);
     } else {
@@ -94,12 +121,18 @@ const [isVideoMaximized, setIsVideoMaximized] = useState(false);
 
   // Screen sharing functions
   const startScreenSharing = async () => {
+    console.log("[SCREEN] Starting screen sharing...");
     const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
     const pc = createPeerConnection("screen");
-    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+    stream.getTracks().forEach((track) => {
+      pc.addTrack(track, stream);
+      console.log("[SCREEN] Added screen track:", track);
+    });
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
+    console.log("[SCREEN] Sent screen offer:", offer);
     socket.emit("screenOffer", offer);
 
     setScreenPeer(pc);
@@ -108,6 +141,7 @@ const [isVideoMaximized, setIsVideoMaximized] = useState(false);
   };
 
   const stopScreenSharing = () => {
+    console.log("[SCREEN] Stopping screen sharing...");
     screenStream?.getTracks().forEach((t) => t.stop());
     setScreenStream(null);
     setScreenPeer(null);
@@ -116,12 +150,14 @@ const [isVideoMaximized, setIsVideoMaximized] = useState(false);
   };
 
   const handleScreenAnswer = async (answer) => {
+    console.log("[SCREEN] Received screen answer:", answer);
     if (screenPeer) {
       await screenPeer.setRemoteDescription(new RTCSessionDescription(answer));
     }
   };
 
   const handleScreenIce = async (candidate) => {
+    console.log("[SCREEN] Received remote ICE candidate:", candidate);
     if (!screenPeer || !screenPeer.remoteDescription) {
       setScreenIceQueue((q) => [...q, candidate]);
     } else {
@@ -132,50 +168,44 @@ const [isVideoMaximized, setIsVideoMaximized] = useState(false);
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  
-      if (!MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
-        console.warn("audio/webm;codecs=opus not supported, using default type.");
-      }
-  
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: "audio/webm;codecs=opus",
       });
-  
+
       const chunks = [];
-  
+
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
           chunks.push(e.data);
         }
       };
-  
+
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunks, { type: "audio/webm;codecs=opus" });
-        console.log("Recording stopped. Blob size:", blob.size);
+        console.log("[RECORDING] Recording stopped. Blob size:", blob.size);
         setAudioBlob(blob);
         stream.getTracks().forEach((t) => t.stop());
       };
-  
+
       mediaRecorderRef.current = mediaRecorder;
       mediaStreamRef.current = stream;
-  
+
       mediaRecorder.start();
       setIsRecording(true);
-      console.log("Recording started");
+      console.log("[RECORDING] Recording started");
     } catch (err) {
-      console.error("Failed to start recording:", err);
+      console.error("[RECORDING] Failed to start recording:", err);
       alert("Microphone access denied or unsupported browser.");
     }
   };
-  
+
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      console.log("Recording stopped");
+      console.log("[RECORDING] Stopped recording");
     }
   };
-  
 
   const handleSendMessage = (message) => {
     if (message.trim()) {
@@ -188,21 +218,19 @@ const [isVideoMaximized, setIsVideoMaximized] = useState(false);
       const reader = new FileReader();
       reader.onloadend = () => {
         if (reader.result) {
-          console.log("Sending audio message, size:", reader.result.byteLength);
+          console.log("[AUDIO MESSAGE] Sending audio message, size:", reader.result.byteLength);
           socket.emit("audioMessage", { audio: reader.result });
-          setAudioBlob(null); // Clear after sending
+          setAudioBlob(null);
         } else {
-          console.warn("Empty audio data");
+          console.warn("[AUDIO MESSAGE] Empty audio data");
         }
       };
       reader.readAsArrayBuffer(audioBlob);
     } else {
-      console.warn("No audioBlob to send");
+      console.warn("[AUDIO MESSAGE] No audioBlob to send");
     }
   };
-  
 
-  // UI drag
   const handleMouseDown = (e) => {
     setIsDragging(true);
     dragOffset.current = {
@@ -223,7 +251,6 @@ const [isVideoMaximized, setIsVideoMaximized] = useState(false);
 
   const handleMouseUp = () => setIsDragging(false);
 
-  // Init
   useEffect(() => {
     const storedUsername = sessionStorage.getItem("username");
     const storedRoom = sessionStorage.getItem("room");
@@ -246,27 +273,30 @@ const [isVideoMaximized, setIsVideoMaximized] = useState(false);
     socket.on("audioIceCandidate", handleAudioIce);
     socket.on("screenAnswer", handleScreenAnswer);
     socket.on("screenIceCandidate", handleScreenIce);
+
     socket.on("screenOffer", async (offer) => {
+      console.log("[SCREEN] Received screen offer:", offer);
       const pc = createPeerConnection("screen");
-    
+
       pc.ontrack = (event) => {
         const remoteStream = event.streams[0];
         if (remoteStream) {
+          console.log("[SCREEN] Received remote screen stream");
           setVideoStreams((prev) => [...prev, remoteStream]);
         }
       };
-    
+
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit("screenAnswer", answer);
-      setScreenPeer(pc); // Optional if you want to track per-peer
+      setScreenPeer(pc);
     });
-    
+
     socket.on("screenShareStopped", () => {
+      console.log("[SCREEN] Screen share stopped by remote user");
       setVideoStreams([]);
     });
-    
 
     return () => {
       socket.off("userList");
@@ -276,22 +306,26 @@ const [isVideoMaximized, setIsVideoMaximized] = useState(false);
       socket.off("screenAnswer");
       socket.off("screenIceCandidate");
       socket.off("screenOffer");
-      socket.off("screenShareStopped"); 
+      socket.off("screenShareStopped");
     };
-    
   }, [socket]);
 
-  // Apply queued ICE candidates
   useEffect(() => {
     audioIceQueue.forEach(async (candidate) => {
-      if (audioPeer) await audioPeer.addIceCandidate(new RTCIceCandidate(candidate));
+      if (audioPeer) {
+        console.log("[AUDIO] Applying queued ICE candidate");
+        await audioPeer.addIceCandidate(new RTCIceCandidate(candidate));
+      }
     });
     setAudioIceQueue([]);
   }, [audioPeer]);
 
   useEffect(() => {
     screenIceQueue.forEach(async (candidate) => {
-      if (screenPeer) await screenPeer.addIceCandidate(new RTCIceCandidate(candidate));
+      if (screenPeer) {
+        console.log("[SCREEN] Applying queued ICE candidate");
+        await screenPeer.addIceCandidate(new RTCIceCandidate(candidate));
+      }
     });
     setScreenIceQueue([]);
   }, [screenPeer]);
@@ -326,11 +360,11 @@ const [isVideoMaximized, setIsVideoMaximized] = useState(false);
                     isMaximized
                       ? {}
                       : {
-                          position: "fixed",
-                          left: `${dragPosition.x}px`,
-                          top: `${dragPosition.y}px`,
-                          zIndex: 1000,
-                        }
+                        position: "fixed",
+                        left: `${dragPosition.x}px`,
+                        top: `${dragPosition.y}px`,
+                        zIndex: 1000,
+                      }
                   }
                   onMouseDown={handleMouseDown}
                 >
@@ -352,11 +386,55 @@ const [isVideoMaximized, setIsVideoMaximized] = useState(false);
                   </button>
                 </div>
               )}
-              {!isScreenSharing && videoStreams.length > 0 && (   <div className="remote-videos">     {videoStreams.map((stream, index) => (       <div         key={index}         className={`remote-video-popup ${isVideoMaximized ? "maximized" : ""}`}         style={           isVideoMaximized             ? {}             : {                 left: `${dragPosition.x + index * 330}px`,                 top: `${dragPosition.y}px`,               }         }         onMouseDown={handleMouseDown}       >         <video           id={`remote-video-${index}`}           className="remote-video-element"           autoPlay           playsInline           muted           ref={(video) => {             if (video && stream && video.srcObject !== stream) {               video.srcObject = stream;               video.play().catch((err) => {                 console.error("Error playing remote video:", err);               });             }           }}         />         <button           className="toggle-maximize-btn"           onClick={(e) => {             e.stopPropagation();             setIsVideoMaximized(!isVideoMaximized);           }}           aria-label={isVideoMaximized ? "Minimize remote video" : "Maximize remote video"}         >           {isVideoMaximized ? <MdFullscreenExit /> : <MdFullscreen />}         </button>       </div>     ))}   </div> )}
+              {!isScreenSharing && videoStreams.length > 0 && (
+                <div className="remote-videos">
+                  {videoStreams.map((stream, index) => (
+                    <div
+                      key={index}
+                      className={`remote-video-popup ${isVideoMaximized ? "maximized" : ""}`}
+                      style={
+                        isVideoMaximized
+                          ? {}
+                          : {
+                            left: `${dragPosition.x + index * 330}px`,
+                            top: `${dragPosition.y}px`,
+                          }
+                      }
+                      onMouseDown={handleMouseDown}
+                    >
+                      <video
+                        id={`remote-video-${index}`}
+                        className="remote-video-element"
+                        autoPlay
+                        playsInline
+                        muted
+                        ref={(video) => {
+                          if (video && stream && video.srcObject !== stream) {
+                            video.srcObject = stream;
+                            video.play().catch((err) => {
+                              console.error("Error playing remote video:", err);
+                            });
+                          }
+                        }}
+                      />
+                      <button
+                        className="toggle-maximize-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsVideoMaximized(!isVideoMaximized);
+                        }}
+                        aria-label={isVideoMaximized ? "Minimize remote video" : "Maximize remote video"}
+                      >
+                        {isVideoMaximized ? <MdFullscreenExit /> : <MdFullscreen />}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </Col>
 
             <Col md={3} className="right-side-container">
-                          <CombinedPage
+              <CombinedPage
                 users={users}
                 messages={messages}
                 currentUser={currentUser}
@@ -370,11 +448,10 @@ const [isVideoMaximized, setIsVideoMaximized] = useState(false);
                 stopLiveSpeaking={stopLiveSpeaking}
                 isRecording={isRecording}
                 isLiveSpeaking={isLiveSpeaking}
-                audioBlob={audioBlob}     
-                setAudioBlob={setAudioBlob} 
+                audioBlob={audioBlob}
+                setAudioBlob={setAudioBlob}
                 onSendAudioMessage={handleSendAudioMessage}
               />
-
             </Col>
           </Row>
         </Container>
