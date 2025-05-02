@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
 import { io } from "socket.io-client";
 
-const SOCKET_URL = "http://10.100.25.83:5000";
+const SOCKET_URL = "https://collaborative-drawing-app-server-j84z.onrender.com";
 
 export const socket = io(SOCKET_URL, {
     transports: ["websocket"],
