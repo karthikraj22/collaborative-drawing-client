@@ -51,11 +51,27 @@ const DrawingPage = ({ setUsername, setRoom }) => {
           username: process.env.REACT_APP_TURN_USERNAME,
           credential: process.env.REACT_APP_TURN_CREDENTIAL,
         },
+        {
+           urls: "stun:stun.l.google.com:19302"
+        }
       ],
     };
 
     const pc = new RTCPeerConnection(configuration);
     console.log("",pc);
+
+    
+    if (type === "screen") {
+      pc.ontrack = (event) => {
+        const remoteStream = event.streams[0];
+        if (remoteStream) {
+          setVideoStreams((prev) => {
+            if (prev.some(s => s.id === remoteStream.id)) return prev;
+            return [...prev, remoteStream];
+          });
+        }
+      };
+    }
     
     const connectionState = pc.connectionState;
     console.log("Connection State:", connectionState);
@@ -277,21 +293,29 @@ const DrawingPage = ({ setUsername, setRoom }) => {
     socket.on("screenOffer", async (offer) => {
       console.log("[SCREEN] Received screen offer:", offer);
       const pc = createPeerConnection("screen");
-
-      pc.ontrack = (event) => {
-        const remoteStream = event.streams[0];
-        if (remoteStream) {
-          console.log("[SCREEN] Received remote screen stream");
-          setVideoStreams((prev) => [...prev, remoteStream]);
+    
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          console.log("[SCREEN] Sending remote ICE candidate");
+          socket.emit("screenIceCandidate", event.candidate);
         }
       };
-
+    
+      // pc.ontrack = (event) => {
+      //   const remoteStream = event.streams[0];
+      //   if (remoteStream) {
+      //     console.log("[SCREEN] Received remote screen stream",event);
+      //     setVideoStreams((prev) => [...prev, remoteStream]);
+      //   }
+      // };
+    
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit("screenAnswer", answer);
       setScreenPeer(pc);
     });
+    
 
     socket.on("screenShareStopped", () => {
       console.log("[SCREEN] Screen share stopped by remote user");
@@ -386,9 +410,12 @@ const DrawingPage = ({ setUsername, setRoom }) => {
                   </button>
                 </div>
               )}
+              {console.log("remote-video",videoStreams,isScreenSharing)}
+              
               {!isScreenSharing && videoStreams.length > 0 && (
                 <div className="remote-videos">
                   {videoStreams.map((stream, index) => (
+                    
                     <div
                       key={index}
                       className={`remote-video-popup ${isVideoMaximized ? "maximized" : ""}`}
@@ -405,17 +432,13 @@ const DrawingPage = ({ setUsername, setRoom }) => {
                       <video
                         id={`remote-video-${index}`}
                         className="remote-video-element"
+                        muted
+                        key={index}
+                        ref={el => {
+                          if (el) el.srcObject = stream;
+                        }}
                         autoPlay
                         playsInline
-                        muted
-                        ref={(video) => {
-                          if (video && stream && video.srcObject !== stream) {
-                            video.srcObject = stream;
-                            video.play().catch((err) => {
-                              console.error("Error playing remote video:", err);
-                            });
-                          }
-                        }}
                       />
                       <button
                         className="toggle-maximize-btn"

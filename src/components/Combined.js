@@ -9,7 +9,7 @@ import {
   InputGroup
 } from "react-bootstrap";
 import {
-   FaMicrophone,
+  FaMicrophone,
   FaStop,
   FaPaperPlane,
   FaVolumeUp,
@@ -67,13 +67,13 @@ const CombinedPage = ({
       setTextMessage("");
     }
   };
-  
+
   useEffect(() => {
     if (audioBlob) {
       handleSendAudioMessageLocal();
     }
   }, [audioBlob]);
-  
+
 
   const handleSendAudioMessageLocal = () => {
     if (audioBlob) {
@@ -113,9 +113,8 @@ const CombinedPage = ({
         {messages.map((msg, index) => (
           <div
             key={index}
-            className={`message-bubble ${
-              msg.username === currentUser ? "sent" : "received"
-            } shadow-sm p-3 mb-3 rounded-3`}
+            className={`message-bubble ${msg.username === currentUser ? "sent" : "received"
+              } shadow-sm p-3 mb-3 rounded-3`}
             style={{
               maxWidth: "75%",
               alignSelf: msg.username === currentUser ? "flex-end" : "flex-start",
@@ -213,50 +212,50 @@ const CombinedPage = ({
         </Row>
 
         <Row className="mt-3">
-  <Col xs={12}>
-    <InputGroup>
-      <Form.Control
-        type="text"
-        placeholder="Type your message..."
-        value={textMessage}
-        onChange={(e) => setTextMessage(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            handleSendTextMessage();
-          }
-        }}
-        aria-label="Message input"
-        style={{ borderRadius: "20px", paddingRight: "2.5rem" }}
-      />
-      <Button
-  variant="primary"
-  onClick={handleSendTextMessage}
-  disabled={!textMessage.trim()}
-  aria-label="Send message"
-  style={{
-    position: "absolute",
-    right: "1px",
-    top: "50%",
-    transform: "translateY(-50%)",
-    borderRadius: "50%", 
-    width: "36px",
-    height: "36px",
-    padding: 0, 
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    overflow: "hidden", 
-    zIndex: 5,
-    cursor: textMessage.trim() ? "pointer" : "not-allowed",
-  }}
->
-  <FaPaperPlane size={18} />
-</Button>
+          <Col xs={12}>
+            <InputGroup>
+              <Form.Control
+                type="text"
+                placeholder="Type your message..."
+                value={textMessage}
+                onChange={(e) => setTextMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendTextMessage();
+                  }
+                }}
+                aria-label="Message input"
+                style={{ borderRadius: "20px", paddingRight: "2.5rem" }}
+              />
+              <Button
+                variant="primary"
+                onClick={handleSendTextMessage}
+                disabled={!textMessage.trim()}
+                aria-label="Send message"
+                style={{
+                  position: "absolute",
+                  right: "1px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  borderRadius: "50%",
+                  width: "36px",
+                  height: "36px",
+                  padding: 0,
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  overflow: "hidden",
+                  zIndex: 5,
+                  cursor: textMessage.trim() ? "pointer" : "not-allowed",
+                }}
+              >
+                <FaPaperPlane size={18} />
+              </Button>
 
-    </InputGroup>
-  </Col>
-</Row>
+            </InputGroup>
+          </Col>
+        </Row>
 
       </div>
 
@@ -308,11 +307,26 @@ const CombinedPage = ({
               transform: "translateX(0)", // visible
             }}
           >
-            <header style={{ marginBottom: "1.25rem" }}>
-              <h5 className="mb-0" style={{ fontWeight: "700" }}>
-                Online Users ({users.length})
-              </h5>
+            <header
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "0.75rem 1rem",
+                backgroundColor: "#f8f9fa",
+                borderRadius: "0.5rem",
+                marginBottom: "1.25rem",
+                boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)",
+              }}
+            >
+              <div style={{ fontSize: "1.1rem", fontWeight: "600", color: "#333" }}>
+                Room: <span style={{ fontWeight: "500", color: "#007bff" }}>{sessionStorage.getItem("room")}</span>
+              </div>
+              <div style={{ fontSize: "1.1rem", fontWeight: "600", color: "#333" }}>
+                Online Users: <span style={{ fontWeight: "500" }}>{users.length}</span>
+              </div>
             </header>
+
 
             {/* Notifications */}
             {notifications.length > 0 && (
